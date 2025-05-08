@@ -3,6 +3,7 @@ import ChatbotIcon from "./components/ChatbotIcon";
 import ChatForm from "./components/ChatForm";
 import ChatMessage from "./components/ChatMessage";
 import { companyInfo } from "./components/companyInfo";
+
 const App = () => {
   const chatBodyRef = useRef();
   const [showChatbot, setShowChatbot] = useState(false);
@@ -13,35 +14,47 @@ const App = () => {
       text: companyInfo,
     },
   ]);
+
   const generateBotResponse = async (history) => {
-    // Helper function to update chat history
     const updateHistory = (text, isError = false) => {
-      setChatHistory((prev) => [...prev.filter((msg) => msg.text != "Thinking..."), { role: "model", text, isError }]);
+      setChatHistory((prev) => [
+        ...prev.filter((msg) => msg.text !== "Thinking..."),
+        { role: "model", text, isError },
+      ]);
     };
-    // Format chat history for API request
-    history = history.map(({ role, text }) => ({ role, parts: [{ text }] }));
+
+    const openaiMessages = history.map(({ role, text }) => ({
+      role: role === "model" ? "assistant" : "user",
+      content: text,
+    }));
+
     const requestOptions = {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: history }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: openaiMessages,
+      }),
     };
+
     try {
-      // Make the API call to get the bot's response
-      const response = await fetch(import.meta.env.VITE_API_URL, requestOptions);
+      const response = await fetch("https://api.openai.com/v1/chat/completions", requestOptions);
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error.message || "Something went wrong!");
-      // Clean and update chat history with bot's response
-      const apiResponseText = data.candidates[0].content.parts[0].text.replace(/\*\*(.*?)\*\*/g, "$1").trim();
-      updateHistory(apiResponseText);
+      if (!response.ok) throw new Error(data?.error?.message || "Error from OpenAI");
+      const reply = data.choices[0].message.content.trim();
+      updateHistory(reply);
     } catch (error) {
-      // Update chat history with the error message
       updateHistory(error.message, true);
     }
   };
+
   useEffect(() => {
-    // Auto-scroll whenever chat history updates
     chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: "smooth" });
   }, [chatHistory]);
+
   return (
     <div className={`container ${showChatbot ? "show-chatbot" : ""}`}>
       <button onClick={() => setShowChatbot((prev) => !prev)} id="chatbot-toggler">
@@ -49,7 +62,6 @@ const App = () => {
         <span className="material-symbols-rounded">close</span>
       </button>
       <div className="chatbot-popup">
-        {/* Chatbot Header */}
         <div className="chat-header">
           <div className="header-info">
             <ChatbotIcon />
@@ -59,25 +71,27 @@ const App = () => {
             keyboard_arrow_down
           </button>
         </div>
-        {/* Chatbot Body */}
         <div ref={chatBodyRef} className="chat-body">
           <div className="message bot-message">
             <ChatbotIcon />
             <p className="message-text">
-              Hey there  <br /> How can I help you today?
+              Hey there <br /> How can I help you today?
             </p>
           </div>
-          {/* Render the chat history dynamically */}
           {chatHistory.map((chat, index) => (
             <ChatMessage key={index} chat={chat} />
           ))}
         </div>
-        {/* Chatbot Footer */}
         <div className="chat-footer">
-          <ChatForm chatHistory={chatHistory} setChatHistory={setChatHistory} generateBotResponse={generateBotResponse} />
+          <ChatForm
+            chatHistory={chatHistory}
+            setChatHistory={setChatHistory}
+            generateBotResponse={generateBotResponse}
+          />
         </div>
       </div>
     </div>
   );
 };
+
 export default App;
